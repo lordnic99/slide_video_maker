@@ -1,0 +1,5 @@
+*.mp4
+download_images
+freepik_videos
+__pycache__
+bing\__pycache__
