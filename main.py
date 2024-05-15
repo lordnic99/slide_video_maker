@@ -11,10 +11,12 @@ import subprocess
 import bing.crawler as crawler
 import bing.helperdownload as helperdownload
 import string
+import utilities
+import caption
 
 
 def generate_audio(text, speed="1.0", device="cpu"):
-    print(f"Dang tao video cho cau: {text}")
+    print(f"Đang chuyển đổi text sang audio: {text}")
     url = "http://113.160.163.14:5000/generate_audio_api"
     data = {"text": text, "speed": speed, "device": device}
 
@@ -23,41 +25,15 @@ def generate_audio(text, speed="1.0", device="cpu"):
     if response.status_code == 201:
         filename = response.json()["url"]
         full_url = f"http://113.160.163.14:5000/static/{filename}"
-        download_audio(full_url, filename)
+        utilities.download_file_from_internet(full_url, filename)
         return filename
     else:
         raise Exception(f"failed with status code: {response.status_code}")
 
 
-def download_audio(url, filename):
-    response = requests.get(url, stream=True)
-    if response.status_code == 200:
-        with open(filename, "wb") as f:
-            for chunk in response.iter_content(1024):
-                f.write(chunk)
-    else:
-        raise Exception(f"download failed with status code: {response.status_code}")
-
-
 def split_sentences(text):
     sentences = re.split(r"[?.!。]", text)
     return list(filter(lambda item: item and item.strip(), sentences))
-
-
-def process_text_for_clip(text, width, font_size):
-    char_width = font_size * 0.7
-    current_line = ""
-    processed_text = ""
-    for word in text[::-1]:
-        if len(current_line) * char_width + len(word) * char_width <= width:
-            current_line += " " + word
-        else:
-            processed_text += current_line + "\n"
-            current_line = word
-
-    processed_text += current_line
-    return processed_text[::-1] + "\n"
-
 
 def pick_random_image(image_name, downloaded_images_folder="download_images"):
     print("\n----------------------")
@@ -175,7 +151,7 @@ def create_video(
     return output_video
 
 
-def create_effect_video(input_jpg, input_audio, input_text, output_name):
+def create_effect_video(input_jpg, input_audio):
     effect_video = None
 
     try:
@@ -214,30 +190,6 @@ def create_effect_video(input_jpg, input_audio, input_text, output_name):
             reverse_foreground,
         )
 
-        # Đọc video tạo ra để thêm âm thanh
-        video_clip = VideoFileClip(output_video)
-
-        # Ghép âm thanh và sub
-        video_width, video_height = video_clip.w, video_clip.h
-        margin_from_bottom = 40
-
-        processed_sentence = process_text_for_clip(input_text, video_width, 30)
-
-        txt_clip = TextClip(
-            processed_sentence, font="font.ttc", fontsize=30, color="white"
-        )
-        text_x = (video_width - txt_clip.size[0]) / 2  # Center text clip horizontally
-        text_y = video_height - txt_clip.size[1] - margin_from_bottom
-        txt_clip = txt_clip.set_pos((text_x, text_y)).set_duration(audio_clip.duration)
-        video_clip = CompositeVideoClip([video_clip, txt_clip])
-        video_clip = video_clip.set_audio(audio_clip)
-
-        # Lưu video cuối cùng
-        video_clip.write_videofile(
-            f"final_{output_name}.mp4", codec="libx264", audio_codec="aac"
-        )
-        os.remove("output.mp4")
-
     except Exception as e:
         print(f"Có lỗi xảy ra: {str(e)}")
 
@@ -246,27 +198,17 @@ def create_effect_video(input_jpg, input_audio, input_text, output_name):
             effect_video.release()
 
 
-def create_freepik_video(freepik_vid_input, audio_input, sentence, output_video):
-    # Đọc video
+def create_freepik_video(freepik_vid_input, audio_input, output_video):
     audio_clip = AudioFileClip(audio_input)
     video_clip = VideoFileClip(freepik_vid_input)
     video_clip = video_clip.subclip(0, audio_clip.duration)
-
-    video_width, video_height = video_clip.w, video_clip.h
-    margin_from_bottom = 40
-
-    processed_sentence = process_text_for_clip(sentence, video_width, 30)
-    # Ghép âm thanh và sub
-    txt_clip = TextClip(processed_sentence, font="font.ttc", fontsize=30, color="white")
-    text_x = (video_width - txt_clip.size[0]) / 2  # Center text clip horizontally
-    text_y = video_height - txt_clip.size[1] - margin_from_bottom
-    txt_clip = txt_clip.set_pos((text_x, text_y)).set_duration(audio_clip.duration)
-
-    video_clip = CompositeVideoClip([video_clip, txt_clip])
     video_clip = video_clip.set_audio(audio_clip)
+        
     video_clip.write_videofile(
-        f"final_{output_video}.mp4", codec="libx264", audio_codec="aac"
+        output_video, codec="libx264", audio_codec="aac"
     )
+
+
 
 
 def merge_all_senetences_video(
@@ -289,8 +231,12 @@ def merge_all_senetences_video(
             "concat",
             "-i",
             "list.txt",
-            "-c",
-            "copy",
+            "-c:v",
+            "libx264",  # Use libx264 encoder for H.264 MP4
+            "-c:a",
+            "aac",     # Use AAC encoder for audio
+            "-movflags",
+            "faststart",  # For faster playback on web
             output_filename,
         ],
         check=True,
@@ -304,40 +250,78 @@ def merge_all_senetences_video(
     os.remove("list.txt")
 
 
-def remove_all_files_in_path(path):
-    for file in os.listdir(path):
-        file_path = os.path.join(path, file)
-        try:
-            os.remove(file_path)
-        except:
-            pass
-
-
 if __name__ == "__main__":
     text = input("Nhập đoạn văn bản: ")
     sentences = split_sentences(text)
-
+    id = lambda i: f"{i+1:03d}"
+    
     for i, sentence in enumerate(sentences):
-        id = lambda i: f"{i+1:03d}"
+        
         if i % 2 == 0:  # tao video freepik
+            video_no_text   = f"cau_{id(i)}_freepik_no_text.mp4"
+            video_no_sound  = f"cau_{id(i)}_freepik_no_sound.mp4"
+            final_video     = f"cau_{id(i)}_freepik.mp4"
+            
             print(f"\n**Câu {i+1}:** {sentence}")
+            
             audio_file = generate_audio(sentence)
-            video_file = freepik.main(sentence)
+            video_file = freepik.find_and_download(sentence)
+            
             create_freepik_video(
-                video_file, audio_file, sentence, f"cau_{id(i)}_freepik"
+                video_file, audio_file, video_no_text
             )
+            
+            print("Tiến hành ghép text vào video")
+            caption.add_text_to_video(
+                video_path=video_no_text,
+                text=sentence,
+                font_path="font.ttc",
+                font_size=35,
+                output_path=video_no_sound
+            )
+            
+            create_freepik_video(
+                video_no_sound, audio_file, final_video
+            )
+            
+            print("------------------------------")
+            
+            os.remove(video_no_text)
+            os.remove(video_no_sound)
             os.remove(audio_file)
         else:  # tao video img
             print(f"\n**Câu {i+1}:** {sentence}")
+            
+            video_no_sound  = f"cau_{id(i)}_img_no_sound.mp4"
+            final_video     = f"cau_{id(i)}_img.mp4"
+            
             jpg_downloaded_name = pick_random_image(
                 bing_image_handler(sentence, "Bing", 10)
             )
             audio_file = generate_audio(sentence)
+            
             create_effect_video(
-                jpg_downloaded_name, audio_file, sentence, f"cau_{id(i)}_gg"
+                jpg_downloaded_name, audio_file
             )
+            
+            print("Tiến hành ghép text vào video")
+            caption.add_text_to_video(
+                video_path="output.mp4",
+                text=sentence,
+                font_path="font.ttc",
+                font_size=35,
+                output_path=video_no_sound
+            )
+            audio_clip = AudioFileClip(audio_file)
+            video_clip = VideoFileClip(video_no_sound)
+            video_clip = video_clip.set_audio(audio_clip)
+            video_clip.write_videofile(
+                final_video, codec="libx264", audio_codec="aac"
+            )
+            os.remove("output.mp4")
+            os.remove(video_no_sound)
             os.remove(audio_file)
 
     merge_all_senetences_video()
-    remove_all_files_in_path("download_images")
-    remove_all_files_in_path("freepik_videos")
+    utilities.remove_all_files_in_path("download_images")
+    utilities.remove_all_files_in_path("freepik_videos")

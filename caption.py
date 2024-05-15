@@ -29,7 +29,7 @@ def add_text_to_video(video_path, text, font_path, font_size, output_path):
     height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = video.get(cv2.CAP_PROP_FPS)
     
-    text_processed = process_text_for_clip(text=text, width=width, font_size=30)
+    text_processed = process_text_for_clip(text=text, width=width, font_size=font_size)
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -61,16 +61,8 @@ def add_text_to_frame(frame, text, font_path, font_size):
         [(text_x - 5, text_y - 5), (text_x + text_width + 5, text_y + text_height + 5)],
         fill=(0, 0, 0, opacity),
     )
-    draw.text((text_x, text_y), text, font=font, fill=(255, 255, 0), align='center')
+    draw.text((text_x, text_y), text, font=font, fill=(0, 255, 240), align='center')
 
     frame = np.array(pil_image)
 
     return frame
-
-add_text_to_video(
-    video_path="final_result_1.mp4",
-    text="試合はオラクル・パークで行われ、試合開始10分前にドジャースの先発ラインナップが発表されると、ジャイアンツの本拠地は大きなブーイングで満たされました。",
-    font_path="font.ttc",
-    font_size=30,
-    output_path="text.mp4",
-)

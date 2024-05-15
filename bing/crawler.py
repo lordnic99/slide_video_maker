@@ -1,8 +1,3 @@
-""" Crawl image urls from image search engine. """
-
-# author: Krishnatejaswi S
-# Email: shentharkrishnatejaswi@gmail.com
-
 from __future__ import print_function
 
 import re

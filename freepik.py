@@ -2,6 +2,8 @@ import requests
 import os
 import string
 import random
+import utilities
+
 
 def get_videos_url(keyword):
     vid_urls = []
@@ -16,18 +18,9 @@ def get_list_videos(keyword):
     res = requests.get(f"https://www.freepik.com/api/videos?filters[aspect_ratio][]=16:9&view_aspect=16:9&format[search]=1&license[free]=1&locale=en&order=relevance&term={keyword}&type[video]=1&page=2", headers=headers)
     return res.json()['items']
 
-def download_video(url, filename):
-    response = requests.get(url, stream=True)
-    if response.status_code == 200:
-        with open(f"freepik_videos/{filename}", "wb") as f:
-            for chunk in response.iter_content(1024):
-                f.write(chunk)
-    else:
-        raise Exception(f"download failed with status code: {response.status_code}")
-    
-    
-def main(key_word):
+def find_and_download(key_word):
     os.makedirs("freepik_videos", exist_ok=True)
+    print("Đang tải video freepik")
     video_urls = get_videos_url(key_word)
     if not video_urls:
         print(f"Không tìm thấy freepik video với keyword: {key_word}")
@@ -37,7 +30,6 @@ def main(key_word):
     url = video_urls[0]
     ext = url.rsplit('.')[-1]
     video_name = f"{random_video_name}.{ext}"
-    download_video(url, f"{random_video_name}.{ext}")
-    print(f"[+] url video: {url}")
+    utilities.download_file_from_internet(url, f"freepik_videos/{random_video_name}.{ext}")
     print(f"-> Tai thanh cong video: {random_video_name}.{ext}")
     return f"freepik_videos/{video_name}"

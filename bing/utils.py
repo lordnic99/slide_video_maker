@@ -1,7 +1,3 @@
-
-# author: Krishnatejaswi S
-# Email: shentharkrishnatejaswi@gmail.com
-
 import chromedriver_autoinstaller
 
 def gen_valid_dir_name_for_keywords(keywords):
